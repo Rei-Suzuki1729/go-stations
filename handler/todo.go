@@ -1,44 +1,53 @@
 package handler
 
 import (
-	"context"
+	"encoding/json"
+	"net/http"
 
 	"github.com/TechBowl-japan/go-stations/model"
 	"github.com/TechBowl-japan/go-stations/service"
 )
 
-// A TODOHandler implements handling REST endpoints.
 type TODOHandler struct {
-	svc *service.TODOService
+	TODOService *service.TODOService
 }
 
-// NewTODOHandler returns TODOHandler based http.Handler.
-func NewTODOHandler(svc *service.TODOService) *TODOHandler {
-	return &TODOHandler{
-		svc: svc,
+func NewTODOHandler(service *service.TODOService) *TODOHandler {
+	return &TODOHandler{TODOService: service}
+}
+
+func (h *TODOHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
+		h.Create(w, r)
+	default:
+		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
 	}
 }
 
-// Create handles the endpoint that creates the TODO.
-func (h *TODOHandler) Create(ctx context.Context, req *model.CreateTODORequest) (*model.CreateTODOResponse, error) {
-	_, _ = h.svc.CreateTODO(ctx, "", "")
-	return &model.CreateTODOResponse{}, nil
-}
+func (h *TODOHandler) Create(w http.ResponseWriter, r *http.Request) {
+	var req model.CreateTODORequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "Failed to decode request body", http.StatusBadRequest)
+		return
+	}
 
-// Read handles the endpoint that reads the TODOs.
-func (h *TODOHandler) Read(ctx context.Context, req *model.ReadTODORequest) (*model.ReadTODOResponse, error) {
-	_, _ = h.svc.ReadTODO(ctx, 0, 0)
-	return &model.ReadTODOResponse{}, nil
-}
+	if req.Subject == "" {
+		http.Error(w, "Subject cannot be empty", http.StatusBadRequest)
+		return
+	}
 
-// Update handles the endpoint that updates the TODO.
-func (h *TODOHandler) Update(ctx context.Context, req *model.UpdateTODORequest) (*model.UpdateTODOResponse, error) {
-	_, _ = h.svc.UpdateTODO(ctx, 0, "", "")
-	return &model.UpdateTODOResponse{}, nil
-}
+	todo, err := h.TODOService.CreateTODO(r.Context(), req.Subject, req.Description)
+	if err != nil {
+		http.Error(w, "Failed to create TODO", http.StatusInternalServerError)
+		return
+	}
 
-// Delete handles the endpoint that deletes the TODOs.
-func (h *TODOHandler) Delete(ctx context.Context, req *model.DeleteTODORequest) (*model.DeleteTODOResponse, error) {
-	_ = h.svc.DeleteTODO(ctx, nil)
-	return &model.DeleteTODOResponse{}, nil
+	res := model.CreateTODOResponse{TODO: *todo}
+	err = json.NewEncoder(w).Encode(res)
+	if err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
